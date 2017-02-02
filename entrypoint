@@ -1,0 +1,59 @@
+#!/bin/sh
+
+if [ "$1" = 'mysqld' ]; then
+    DATADIR=`mysqld --verbose --help --log-bin-index="$(mktemp -u)" 2>/dev/null | awk '$1 == "datadir" { print $2; exit }'`
+
+    if [ `id -u` = 0 ]; then
+        mkdir -p "$DATADIR" /run/mysqld
+        chown -R mysql:mysql "$DATADIR" /run/mysqld
+
+        exec gosu mysql "$0" "$@"
+        exit 0
+    fi
+
+    if [ ! -d "$DATADIR/mysql" ]; then
+        MYSQL_ROOT_PASSWORD="$(pwgen -1 32)"
+        echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
+
+        mysql_install_db --datadir="$DATADIR" --rpm
+
+        mysqld --skip-networking & pid="$!"
+
+        for i in {30..0}; do
+            if echo 'SELECT 1' | mysql --protocol=socket -uroot &> /dev/null; then
+                break
+            fi
+            echo 'MySQL init process in progress...'
+            sleep 1
+        done
+        if [ "$i" = 0 ]; then
+            echo >&2 'MySQL init process failed.'
+            exit 1
+        fi
+
+        echo "SET @@SESSION.SQL_LOG_BIN=0; DELETE FROM mysql.user; CREATE USER 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}'; GRANT ALL ON *.* TO 'root'@'%' WITH GRANT OPTION; DROP DATABASE IF EXISTS test; FLUSH PRIVILEGES" | mysql --protocol=socket -uroot
+
+        if [ "$MYSQL_DATABASE" ]; then
+            echo "Create database $MYSQL_DATABASE"
+            echo "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` ;" | mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}"
+        fi
+        if [ "$MYSQL_USER" -a "$MYSQL_PASSWORD" ]; then
+            echo "Create user $MYSQL_USER"
+            echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" | mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}" "$MYSQL_DATABASE"
+
+            if [ "$MYSQL_DATABASE" ]; then
+                echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'%' ;" | mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}" "$MYSQL_DATABASE"
+            fi
+
+            echo 'FLUSH PRIVILEGES ;' | mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}" "$MYSQL_DATABASE"
+        fi
+
+        if ! kill -s TERM "$pid" || ! wait "$pid"; then
+            echo >&2 'MySQL init process failed.'
+            exit 1
+        fi
+    fi
+fi
+
+exec $@
+
