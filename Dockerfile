@@ -1,4 +1,4 @@
-FROM armhf/alpine
+FROM turgon37/armhf-alpine:latest
 
 ENV GOSU_VERSION=1.9
 
@@ -24,10 +24,9 @@ RUN sed -ri 's/^user\s/#&/' /etc/mysql/my.cnf && \
     chown -R mysql:mysql /var/lib/mysql /var/run/mysqld && \
     chmod 777 /var/run/mysqld
 
-VOLUME ["/var/lib/mysql"]
-
 COPY entrypoint /sbin/entrypoint
 
+VOLUME ["/var/lib/mysql"]
 EXPOSE 3306/tcp
 
 ENTRYPOINT ["entrypoint"]
