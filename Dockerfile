@@ -1,4 +1,9 @@
 FROM turgon37/armhf-alpine:latest
+MAINTAINER Pierre GINDRAUD <pgindraud@gmail.com>
+
+ARG BUILD_TIME
+
+LABEL image.build.time=$BUILD_TIME
 
 ENV GOSU_VERSION=1.9
 
