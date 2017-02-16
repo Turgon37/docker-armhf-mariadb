@@ -1,4 +1,4 @@
-FROM turgon37/armhf-alpine:latest
+FROM container4armhf/armhf-alpine:3.5
 MAINTAINER Pierre GINDRAUD <pgindraud@gmail.com>
 
 ARG BUILD_TIME
